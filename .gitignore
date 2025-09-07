@@ -1,0 +1,8 @@
+report/
+volumes/
+configs/filelist.txt
+*.tar.gz
+*.zip
+*.log
+*.bak
+.DS_Store
