@@ -6,3 +6,19 @@ configs/filelist.txt
 *.log
 *.bak
 .DS_Store
+# pesos e caches (não versionar)
+**/.ollama/**
+**/models/**
+**/checkpoints/**
+**/weights/**
+**/blobs/**
+**/cache/**
+**/.cache/**
+**/qdrant/storage/**
+**/node_modules/**
+**/__pycache__/**
+**/*.bin
+**/*.gguf
+**/*.pt
+**/*.safetensors
+**/*.ckpt

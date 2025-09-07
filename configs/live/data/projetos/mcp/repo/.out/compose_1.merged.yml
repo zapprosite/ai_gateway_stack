@@ -1,0 +1,76 @@
+name: docker_dev_mcp
+services:
+  mcp-api:
+    command:
+      - /bin/sh
+      - -lc
+      - pip install -q fastapi uvicorn && uvicorn main:app --host 0.0.0.0 --port 8010
+    container_name: mcp-api
+    image: python:3.11-slim
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8010
+        published: "8010"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /data/mcp/fastapi
+        target: /app
+        bind:
+          create_host_path: true
+    working_dir: /app
+  mcp-kimi2:
+    command:
+      - sleep
+      - infinity
+    container_name: mcp-kimi2
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: all
+      NVIDIA_VISIBLE_DEVICES: all
+    gpus:
+      - count: -1
+    image: nvidia/cuda:12.4.1-runtime-ubuntu22.04
+    ipc: host
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /data/mcp/models
+        target: /models
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /data/mcp/cache
+        target: /cache
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /data/mcp
+        target: /workspace
+        bind:
+          create_host_path: true
+    working_dir: /workspace
+  mcp-qdrant:
+    container_name: mcp-qdrant
+    image: qdrant/qdrant:v1.12.4
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 6333
+        published: "6334"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /data/mcp/qdrant
+        target: /qdrant/storage
+        bind:
+          create_host_path: true
+networks:
+  default:
+    name: docker_dev_mcp_default

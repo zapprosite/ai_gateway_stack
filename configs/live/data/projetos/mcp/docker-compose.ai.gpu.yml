@@ -1,0 +1,39 @@
+name: mcp
+services:
+  mcp-qdrant:
+    image: qdrant/qdrant@sha256:6ac4807063bbecddca0250bfbcff52acf18c22263b904d12919349e6d0a408f1
+    container_name: mcp-qdrant
+    volumes:
+      - ${QDRANT_DIR}:/qdrant/storage
+    ports:
+      - "127.0.0.1:${QDRANT_PORT}:6333"
+    restart: unless-stopped
+
+  mcp-ollama:
+    image: ollama/ollama@sha256:03eaa1581455ba16e7c954d799e4f44996b60ae668261acd00a0e80a241ed720
+    container_name: mcp-ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=12h
+      - OLLAMA_NUM_PARALLEL=2
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ${LLM_DIR}:/root/.ollama
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT}:11434"
+    gpus: all
+    restart: unless-stopped
+
+  mcp-litellm:
+    build:
+      context: .
+      dockerfile: Dockerfile.litellm
+    container_name: mcp-litellm
+    volumes:
+      - ${HF_CACHE}:/root/.cache/huggingface
+      - ./conf/litellm_config.yaml:/config/litellm_config.yaml:ro
+    ports:
+      - "127.0.0.1:${LITELLM_PORT}:4000"
+    depends_on:
+      - mcp-ollama
+    restart: unless-stopped

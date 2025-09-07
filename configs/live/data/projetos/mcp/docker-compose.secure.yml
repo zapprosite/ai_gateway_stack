@@ -1,0 +1,35 @@
+services:
+  ubuserv:
+    build:
+      context: ./repo/secure_ubuntu
+      dockerfile: Dockerfile
+      args:
+        UBU_USER: ${UBU_USER:-dev}
+        UBU_UID: ${UBU_UID:-1000}
+        UBU_GID: ${UBU_GID:-1000}
+    container_name: ubuserv
+    hostname: ubuserv
+    env_file:
+      - ./conf/ubuntu_secure.env
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+    working_dir: /work
+    tty: true
+    stdin_open: true
+    volumes:
+      - /data/projetos:/work:rw
+      - /data/llm/ollama_models:/llm/ollama_models:rw
+      - /data/llm/hf_cache:/llm/hf_cache:rw
+      - ${HOME}/mcp_logs:/logs:rw
+    gpus: all
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "10"

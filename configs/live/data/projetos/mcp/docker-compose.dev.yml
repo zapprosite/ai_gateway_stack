@@ -1,0 +1,13 @@
+name: mcp
+services:
+  mcp-code:
+    image: codercom/code-server:latest
+    container_name: mcp-code
+    environment:
+      - PASSWORD=${CODE_PASSWORD:-changeme}
+    working_dir: /home/coder/project
+    volumes:
+      - /data/projetos/mcp:/home/coder/project
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped

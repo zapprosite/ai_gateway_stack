@@ -1,0 +1,78 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    environment:
+      - QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
+    volumes:
+      - ${QDRANT_STORAGE}:/qdrant/storage
+    ports:
+      - "${PORT_QDRANT}:6333"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  ollama:
+    image: ollama/ollama:latest
+    runtime: nvidia
+    environment:
+      - OLLAMA_KEEP_ALIVE=6h
+    volumes:
+      - ${OLLAMA_MODELS_DIR}:/root/.ollama
+    ports:
+      - "${PORT_OLLAMA}:11434"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  litellm:
+    image: ghcr.io/berriai/litellm:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    command: ["litellm", "proxy", "--host", "0.0.0.0", "--port", "4000", "--config", "/conf/litellm_config.yaml"]
+    volumes:
+      - /data/projetos/mcp/conf/litellm_config.yaml:/conf/litellm_config.yaml:ro
+    ports:
+      - "${PORT_LTL}:4000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    build:
+      context: /data/projetos/mcp/repo
+    environment:
+      - LLM_BASE_URL=http://litellm:4000
+      - LLM_MODEL=local-kimi
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - /data/projetos/mcp/repo:/app
+      - /data/projetos/mcp/logs/api:/var/log/mcp-api
+    ports:
+      - "${PORT_API}:8010"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+networks:
+  default:
+    name: ${NETWORK}
+    driver: bridge

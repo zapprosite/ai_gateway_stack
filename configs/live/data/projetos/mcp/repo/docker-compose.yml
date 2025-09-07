@@ -1,0 +1,162 @@
+version: "3.9"
+
+name: local-mcp-stack
+
+services:
+  mcp-api:
+    build:
+      context: ./repo/app
+      dockerfile: Dockerfile
+    container_name: mcp-api
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${PORT_API}"]
+    environment:
+      - PORT_API=${PORT_API}
+      - OLLAMA_URL=http://ollama:${PORT_OLLAMA}
+      - QDRANT_URL=http://qdrant:${PORT_QDRANT}
+      - LITELLM_URL=http://litellm:${PORT_LTL}
+      - HF_HOME=${HF_HOME}
+    ports:
+      - "${PORT_API}:${PORT_API}"
+    volumes:
+      - ./logs:/app/logs
+      - ./conf:/app/conf:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:${PORT_API}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      ollama:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    command: ["litellm", "--config", "/app/config.yaml", "--port", "${PORT_LTL}", "--host", "0.0.0.0"]
+    environment:
+      - LITELLM_CONFIG=/app/config.yaml
+      - HF_HOME=${HF_HOME}
+    volumes:
+      - ./conf/litellm_config.yaml:/app/config.yaml:ro
+    ports:
+      - "${PORT_LTL}:${PORT_LTL}"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:${PORT_LTL}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "${PORT_OLLAMA}:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=30m
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
+      - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES}
+    volumes:
+      - ${OLLAMA_MODELS}:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    ports:
+      - "${PORT_QDRANT}:6333"
+    volumes:
+      - ./storage/qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # Optional MCP sidecars (disabled by default via profiles)
+  pg-mcp-server:
+    profiles: ["pg"]
+    image: postgres:16-alpine
+    container_name: pg-mcp-server
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  pg-mcp-api:
+    profiles: ["pg"]
+    build:
+      context: ./repo/app
+      dockerfile: Dockerfile
+    container_name: pg-mcp-api
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@pg-mcp-server:5432/postgres
+    command: ["uvicorn", "servers.pg_mcp_server:app", "--host", "0.0.0.0", "--port", "8083"]
+    depends_on:
+      pg-mcp-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  deepwiki-mcp:
+    profiles: ["deepwiki"]
+    build:
+      context: ./repo/app
+      dockerfile: Dockerfile
+    container_name: deepwiki-mcp
+    command: ["uvicorn", "servers.deepwiki_server:app", "--host", "0.0.0.0", "--port", "8082"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  zen-mcp:
+    profiles: ["zen"]
+    build:
+      context: ./repo/app
+      dockerfile: Dockerfile
+    container_name: zen-mcp
+    command: ["uvicorn", "servers.zen_server:app", "--host", "0.0.0.0", "--port", "8081"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  # None: using bind mounts for explicit local-only control
+
+networks:
+  default:
+    driver: bridge

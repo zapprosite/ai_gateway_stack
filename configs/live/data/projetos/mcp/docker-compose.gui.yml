@@ -1,0 +1,16 @@
+name: mcp
+services:
+  mcp-gui:
+    image: lscr.io/linuxserver/webtop@sha256:29f0e77f126c0c4766c2b15a25f2e69aef6dea43ef328e8b7e2768e3132ea8ac
+    container_name: mcp-gui
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - TITLE=GUI-KDE
+    volumes:
+      - ${GUI_HOME}:/config
+    ports:
+      - "127.0.0.1:${GUI_PORT}:3000"
+    shm_size: "2gb"
+    restart: unless-stopped

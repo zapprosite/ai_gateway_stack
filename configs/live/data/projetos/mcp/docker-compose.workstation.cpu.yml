@@ -1,0 +1,83 @@
+services:
+  devbox:
+    build:
+      context: ./repo/devbox
+      dockerfile: Dockerfile
+      args:
+        DEV_USER: ${DEV_USER}
+        DEV_UID: ${DEV_UID}
+        DEV_GID: ${DEV_GID}
+    container_name: mcp-devbox
+    restart: unless-stopped
+    env_file:
+      - ./conf/workstation.env
+    environment:
+      PASSWORD: ${CS_PASSWORD}
+      TZ: ${TZ}
+      HF_HOME: /home/${DEV_USER}/.cache/huggingface
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /data/projetos:/workspace
+      - /data/llm/hf_cache:/home/${DEV_USER}/.cache/huggingface
+      - ${HOME}/mcp_logs:/logs
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile: { soft: 1048576, hard: 1048576 }
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "10" }
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mcp-ollama
+    restart: unless-stopped
+    env_file:
+      - ./conf/workstation.env
+    environment:
+      OLLAMA_MODELS: ${OLLAMA_MODELS}
+      OLLAMA_NUM_GPU: "0"
+    volumes:
+      - ${OLLAMA_MODELS}:${OLLAMA_MODELS}
+    ports:
+      - "127.0.0.1:11434:11434"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "10" }
+
+  litellm:
+    platform: linux/amd64
+    image: ghcr.io/berriai/litellm:latest
+    container_name: mcp-litellm
+    restart: unless-stopped
+    command: ["litellm","--port","4000","--host","0.0.0.0","--config","/conf/litellm_config.yaml"]
+    env_file:
+      - ./conf/workstation.env
+    volumes:
+      - ./conf:/conf:ro
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      - ollama
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "10" }
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mcp-qdrant
+    restart: unless-stopped
+    volumes:
+      - ./storage/qdrant:/qdrant/storage
+    ports:
+      - "127.0.0.1:6333:6333"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "10" }

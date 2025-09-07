@@ -1,0 +1,116 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mcp-ollama
+    restart: unless-stopped
+    networks: [mcp_net]
+    ports:
+      - "${PORT_OLLAMA:-11434}:11434"
+    environment:
+      OLLAMA_MODELS: /models
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    volumes:
+      - ${OLLAMA_MODELS:-/data/llm/ollama_models}:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mcp-qdrant
+    restart: unless-stopped
+    networks: [mcp_net]
+    ports:
+      - "${PORT_QDRANT:-6333}:6333"
+    volumes:
+      - /data/projetos/mcp/storage/qdrant:/qdrant/storage
+
+  litellm:
+    build:
+      context: ./infra/mcp
+      dockerfile: litellm.Dockerfile
+    platform: linux/amd64
+    container_name: mcp-litellm
+    restart: unless-stopped
+    networks: [mcp_net]
+    depends_on:
+      ollama:
+        condition: service_started
+    ports:
+      - "${PORT_LTL:-4000}:${PORT_LTL:-4000}"
+    environment:
+      LITELLM_CONFIG: /config/litellm_config.yaml
+    volumes:
+      - ./infra/mcp/litellm_config.yaml:/config/litellm_config.yaml:ro
+
+  mcp-api:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: mcp-api
+    restart: unless-stopped
+    networks: [mcp_net]
+    env_file:
+      - ../conf/.env
+    environment:
+      PORT_API: ${PORT_API:-8010}
+      PG_MCP_URL: ${PG_MCP_URL}
+      DEEPWIKI_MCP_URL: ${DEEPWIKI_MCP_URL}
+      ZEN_MCP_URL: ${ZEN_MCP_URL}
+      LITELLM_URL: http://litellm:${PORT_LTL:-4000}
+      OLLAMA_URL: http://ollama:11434
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      litellm:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+    ports:
+      - "${PORT_API:-8010}:8000"
+
+  zen-mcp:
+    profiles: [zen]
+    build:
+      context: ../ext/zen-mcp
+    container_name: mcp-zen-mcp
+    networks: [mcp_net]
+    environment:
+      PORT: 8081
+    expose: ["8081"]
+    restart: unless-stopped
+
+  deepwiki-mcp:
+    profiles: [deepwiki]
+    build:
+      context: ../ext/deepwiki-mcp
+    container_name: mcp-deepwiki-mcp
+    networks: [mcp_net]
+    environment:
+      PORT: 8082
+    expose: ["8082"]
+    restart: unless-stopped
+
+  pg-mcp-server:
+    profiles: [pg]
+    build:
+      context: ../ext/pg-mcp-server
+    container_name: mcp-pg-mcp-server
+    networks: [mcp_net]
+    environment:
+      PORT: 8083
+      PGHOST: postgres
+      PGPORT: ${PORT_PG:-5432}
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    expose: ["8083"]
+    restart: unless-stopped
+
+networks:
+  mcp_net:
+    driver: bridge
+    attachable: true

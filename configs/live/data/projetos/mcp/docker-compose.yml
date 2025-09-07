@@ -1,0 +1,84 @@
+version: "3.8"
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "1m"
+    max-file: "10"
+
+networks:
+  mcp_net:
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:latest
+    container_name: mcp-litellm
+    command: ["litellm", "--port", "4000", "--host", "0.0.0.0", "--config", "/conf/litellm_config.yaml"]
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - ./conf/.env
+    volumes:
+      - ./conf:/conf:ro
+    networks:
+      - mcp_net
+    logging: *default-logging
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mcp-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    env_file:
+      - ./conf/.env
+    environment:
+      - OLLAMA_MODELS=/data/llm/ollama_models
+    volumes:
+      - /data/llm/ollama_models:/data/llm/ollama_models
+    networks:
+      - mcp_net
+    logging: *default-logging
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    gpus: all
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mcp-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - ./storage/qdrant:/qdrant/storage
+    networks:
+      - mcp_net
+    logging: *default-logging
+
+  mcp-api:
+    build:
+      context: ./repo/mcp_api
+      dockerfile: Dockerfile
+    container_name: mcp-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8010:8010"
+    env_file:
+      - ./conf/.env
+    environment:
+      - PORT_API=${PORT_API}
+      - PORT_LTL=${PORT_LTL}
+      - PORT_OLLAMA=${PORT_OLLAMA}
+      - PORT_QDRANT=${PORT_QDRANT}
+    networks:
+      - mcp_net
+    logging: *default-logging
+    depends_on:
+      - litellm
+      - ollama
+      - qdrant

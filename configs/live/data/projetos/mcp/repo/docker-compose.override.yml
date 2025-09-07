@@ -1,0 +1,10 @@
+services:
+  vllm-kimi:
+    command:
+      - --model;${MODEL_NAME};--dtype;${VLLM_DTYPE:-bfloat16};--max-model-len;${VLLM_MAX_LEN:-2048}
+      - --gpu-memory-utilization;${VLLM_GPU_UTIL:-0.70}
+      - --enforce-eager
+      - --host;0.0.0.0;--port;${VLLM_CONTAINER_PORT:-8000}
+      - --download-dir;/hf_cache
+    volumes: [ "./hf_cache:/hf_cache" ]
+    ports: [ "127.0.0.1:8001:${VLLM_CONTAINER_PORT:-8000}" ]

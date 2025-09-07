@@ -1,0 +1,9 @@
+services:
+  devbox:
+    deploy: {}
+    gpus: null
+  ollama:
+    deploy: {}
+    gpus: null
+    environment:
+      - OLLAMA_NUM_GPU=0
